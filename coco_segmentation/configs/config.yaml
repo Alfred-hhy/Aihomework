@@ -1,0 +1,73 @@
+# COCO Semantic Segmentation Configuration
+
+# Data paths
+data:
+  root: "../"
+  train_images: "train2014"
+  val_images: "val2014"
+  test_images: "test"
+  train_ann: "annotations/instances_train2014.json"
+  val_ann: "annotations/instances_val2014.json"
+
+# Model settings
+model:
+  name: "segformer"
+  backbone: "nvidia/segformer-b5-finetuned-ade-640-640"
+  num_classes: 81  # 80 COCO classes + background
+  pretrained: true
+
+# Training settings
+training:
+  batch_size: 8  # per GPU
+  num_workers: 4
+  epochs: 100
+
+  # Optimizer
+  optimizer: "adamw"
+  learning_rate: 6.0e-5
+  weight_decay: 0.01
+
+  # Scheduler
+  scheduler: "polynomial"
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+
+  # Loss
+  loss_type: "ce_dice"  # ce, dice, or ce_dice
+  dice_weight: 0.5
+
+  # Mixed precision
+  use_amp: true
+
+  # Gradient accumulation
+  accumulation_steps: 2
+
+# Data augmentation
+augmentation:
+  train:
+    input_size: [512, 512]
+    scale_range: [0.5, 2.0]
+    horizontal_flip: true
+    color_jitter: true
+    gaussian_blur: true
+  val:
+    input_size: [512, 512]
+
+# Inference settings
+inference:
+  input_size: [512, 512]
+  use_tta: true
+  tta_scales: [0.75, 1.0, 1.25]
+  tta_flip: true
+
+# Checkpointing
+checkpoint:
+  save_dir: "checkpoints"
+  save_top_k: 3
+  monitor: "val_mIoU"
+  mode: "max"
+
+# Logging
+logging:
+  log_dir: "logs"
+  log_every_n_steps: 50

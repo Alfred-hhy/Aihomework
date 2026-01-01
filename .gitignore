@@ -1,0 +1,38 @@
+# Data files
+*.zip
+train2014/
+val2014/
+test/
+annotations/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.eggs/
+*.egg-info/
+*.egg
+
+# Training outputs
+checkpoints/
+logs/
+predictions/
+*.pth
+*.pt
+
+# Visualizations
+*.png
+*.jpg
+*.jpeg
+
+# Misc
+.DS_Store
+Thumbs.db
