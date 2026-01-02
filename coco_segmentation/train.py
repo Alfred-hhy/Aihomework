@@ -193,8 +193,12 @@ def validate(model, val_loader, criterion, config, rank=0):
     return avg_loss, val_metrics
 
 
-def save_checkpoint(model, optimizer, scheduler, scaler, epoch, metrics, save_path, is_best=False):
-    """保存检查点"""
+def save_checkpoint(model, optimizer, scheduler, scaler, epoch, metrics, save_dir, is_best=False):
+    """
+    保存检查点 - 只保存最新和最佳模型
+    - latest_checkpoint.pth: 用于恢复训练
+    - best_model.pth: 最佳模型，用于推理
+    """
     state = {
         'epoch': epoch,
         'model_state_dict': model.module.state_dict() if hasattr(model, 'module') else model.state_dict(),
@@ -204,14 +208,45 @@ def save_checkpoint(model, optimizer, scheduler, scaler, epoch, metrics, save_pa
         'metrics': metrics,
     }
 
-    torch.save(state, save_path)
+    # 保存最新检查点（用于恢复训练）
+    latest_path = os.path.join(save_dir, 'latest_checkpoint.pth')
+    torch.save(state, latest_path)
 
+    # 如果是最佳模型，额外保存一份
     if is_best:
-        best_path = save_path.replace('.pth', '_best.pth')
+        best_path = os.path.join(save_dir, 'best_model.pth')
         torch.save(state, best_path)
 
 
-def main(rank, world_size, config):
+def load_checkpoint_for_training(checkpoint_path, model, optimizer, scheduler, scaler):
+    """
+    从checkpoint恢复训练状态
+    Returns:
+        start_epoch: 从哪个epoch继续
+        best_miou: 之前的最佳mIoU
+    """
+    print(f"Loading checkpoint from {checkpoint_path} for resuming training...")
+    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+
+    # 加载模型权重
+    if hasattr(model, 'module'):
+        model.module.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        model.load_state_dict(checkpoint['model_state_dict'])
+
+    # 加载优化器和调度器状态
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    scaler.load_state_dict(checkpoint['scaler_state_dict'])
+
+    start_epoch = checkpoint['epoch'] + 1
+    best_miou = checkpoint['metrics'].get('mIoU', 0.0)
+
+    print(f"Resumed from epoch {checkpoint['epoch']}, best mIoU: {best_miou*100:.2f}%")
+    return start_epoch, best_miou
+
+
+def main(rank, world_size, config, args=None):
     """主训练函数"""
     is_distributed = world_size > 1
 
@@ -314,8 +349,15 @@ def main(rank, world_size, config):
     # 混合精度
     scaler = GradScaler(enabled=config['training'].get('use_amp', True))
 
-    # 训练循环
-    best_miou = 0.0
+    # 检查是否resume
+    if args and args.resume:
+        start_epoch, best_miou = load_checkpoint_for_training(
+            args.resume, model, optimizer, scheduler, scaler
+        )
+    else:
+        start_epoch = 0
+        best_miou = 0.0
+
     epochs = config['training']['epochs']
 
     if rank == 0:
@@ -325,9 +367,11 @@ def main(rank, world_size, config):
         print(f"Val samples: {len(val_dataset)}")
         print(f"Batch size per GPU: {batch_size}")
         print(f"Total epochs: {epochs}")
+        if start_epoch > 0:
+            print(f"Resuming from epoch: {start_epoch}")
         print(f"{'='*60}\n")
 
-    for epoch in range(epochs):
+    for epoch in range(start_epoch, epochs):
         if is_distributed:
             train_sampler.set_epoch(epoch)
 
@@ -361,7 +405,7 @@ def main(rank, world_size, config):
 
             save_checkpoint(
                 model, optimizer, scheduler, scaler, epoch,
-                val_metrics, str(save_dir / f'checkpoint_epoch_{epoch}.pth'),
+                val_metrics, str(save_dir),
                 is_best=is_best
             )
 
@@ -377,6 +421,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description='COCO Semantic Segmentation Training')
     parser.add_argument('--config', type=str, default='configs/config.yaml',
                         help='Path to config file')
+    parser.add_argument('--resume', type=str, default=None,
+                        help='Path to checkpoint to resume training from')
     parser.add_argument('--local_rank', type=int, default=0,
                         help='Local rank for distributed training')
     return parser.parse_args()
@@ -399,6 +445,6 @@ if __name__ == '__main__':
 
     # 单卡或多卡训练
     if world_size > 1:
-        main(local_rank, world_size, config)
+        main(local_rank, world_size, config, args)
     else:
-        main(0, 1, config)
+        main(0, 1, config, args)

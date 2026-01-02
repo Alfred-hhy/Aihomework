@@ -18,9 +18,9 @@ model:
 
 # Training settings
 training:
-  batch_size: 8  # per GPU
+  batch_size: 16  # per GPU (优化显存利用率)
   num_workers: 4
-  epochs: 100
+  epochs: 30  # 继续训练到30个epoch（从epoch 10开始再训练20轮）
 
   # Optimizer
   optimizer: "adamw"

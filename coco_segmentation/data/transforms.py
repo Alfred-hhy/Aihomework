@@ -15,14 +15,10 @@ def get_train_transforms(config):
     input_size = aug_config['input_size']
 
     transforms_list = [
-        # 随机缩放裁剪
-        A.RandomResizedCrop(
-            height=input_size[0],
-            width=input_size[1],
-            scale=tuple(aug_config.get('scale_range', [0.5, 2.0])),
-            ratio=(0.75, 1.33),
-            p=1.0,
-        ),
+        # 先缩放，然后padding到512x512，最后随机裁剪
+        A.LongestMaxSize(max_size=int(input_size[0] * 1.5)),
+        A.PadIfNeeded(min_height=input_size[0], min_width=input_size[1], border_mode=0, value=0),
+        A.RandomCrop(height=input_size[0], width=input_size[1], p=1.0),
     ]
 
     # 水平翻转

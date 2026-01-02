@@ -23,10 +23,10 @@ __pycache__/
 
 # Training outputs
 checkpoints/
-logs/
 predictions/
 *.pth
 *.pt
+# 保留 logs/ 用于 TensorBoard（文件很小，只有 ~150KB）
 
 # Visualizations
 *.png
